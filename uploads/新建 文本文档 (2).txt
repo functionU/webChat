@@ -1,0 +1,375 @@
+<template>
+	<div id="app">
+		<div id="left">
+			<p>在线用户:{{userArray.length}}</p>
+			<div v-for="(item,index) in userArray" @click="privateChat(item.id,item.user,index)" class="onliUser" :class="{'chose':index==signindex}">
+				{{item.user}}
+			</div>
+		</div>
+		<div id="right">
+			<div class="message" style="overflow-y: scroll;">
+				<div class='messageView' :class="{'sign':true,'left':item.user!=user,'right':item.user==user}"
+					v-for="(item) in messageArray">
+					<div class="text">
+						<p :class="{'left':item.user!=user,'right':item.user==user}">{{item.data}}</p>
+					</div>
+					<img src="../public/icon.svg" width="50px">
+				</div>
+			</div>
+			<div class="submit">
+				<div class="file" @click="fileChose"></div>
+				<input type="file" id="file" class="sendFile">
+				<div class="sendInput">
+					<input v-model:value="send" @focus="sign=true" @blur="sign=false">
+				</div>
+
+				<div class="button" @click="sendClick">
+
+				</div>
+			</div>
+		</div>
+
+	</div>
+</template>
+
+<script>
+	import io from "socket.io-client";
+	import axios from 'axios'
+	import qs from 'qs'
+	export default {
+		name: 'app',
+		data() {
+			return {
+				ws: "",
+				send: "",
+				messageArray: [],
+				user: "",
+				userId: "",
+				userArray: [],
+				to: "",
+				toUser: "",
+				sign: false,
+				signindex:-1,
+			}
+		},
+		components: {
+
+		},
+		mounted() {
+			let user = prompt("请输入用户名");
+			let that = this;
+			let socket = io("ws://localhost:3000");
+			while (user === "") {
+				user = prompt("请输入用户名");
+			}
+			this.user = user;
+			socket.on("message", (data) => {
+
+				let fromTo = data.user + "-" + data.toUser;
+				let toFrom = data.toUser + "-" + data.user;
+
+				if (localStorage.getItem(fromTo)) {
+
+					that.messageArray = JSON.parse(localStorage.getItem(fromTo))
+					that.messageArray.push(data);
+					localStorage.setItem(fromTo, JSON.stringify(that.messageArray))
+
+				} else if (localStorage.getItem(toFrom)) {
+					that.messageArray = JSON.parse(localStorage.getItem(toFrom))
+					that.messageArray.push(data);
+					localStorage.setItem(toFrom, JSON.stringify(that.messageArray))
+
+				} else {
+					that.messageArray = [];
+					that.messageArray.push(data)
+					localStorage.setItem(fromTo, JSON.stringify(that.messageArray))
+
+				}
+
+
+			});
+			socket.on('connect', (data) => {
+				let login = {
+					user: that.user
+				};
+				socket.emit('loginServe', login)
+			})
+			socket.on('logined', (data) => {
+				that.userId = data;
+			})
+			socket.on("userNumber", (data) => {
+				data.map((item, index) => {
+					if (item.id === that.userId) {
+						data.splice(index, 1);
+					}
+				})
+				that.userArray = data;
+			})
+
+			this.ws = socket;
+
+			document.addEventListener('keydown', (event) => {
+				if (event.key == 'Enter' && this.sign) {
+					this.sendClick();
+				}
+			})
+		},
+		updated() {
+			let mes = document.querySelector('.message');
+			mes.scrollTop = mes.scrollHeight + 1000;
+		},
+		methods: {
+			privateChat(id, user,index) {
+				this.to = id;
+				this.toUser = user;
+				let fromTo = this.user + "-" + this.toUser;
+				let toFrom = this.toUser + "-" + this.user;
+				if (localStorage.getItem(toFrom)) {
+					this.messageArray = JSON.parse(localStorage.getItem(toFrom))
+				} else {
+					this.messageArray = JSON.parse(localStorage.getItem(fromTo))
+				}
+                this.signindex=index
+			},
+			sendClick() {
+				if (this.to === "") {
+					alert("请选择发送对象");
+				} else if (this.send == "") {
+					alert("输入内容为空")
+				} else {
+
+					this.ws.emit("message", {
+						user: this.user,
+						data: this.send,
+						to: this.to,
+						toUser: this.toUser,
+						from: this.userId,
+
+					})
+					this.send = "";
+				}
+
+			},
+			fileChose(e) {
+				let file = document.querySelector('.sendFile');
+				file.click();
+
+
+
+			},
+			sub(e) {
+
+				let file = document.querySelector('#file');
+
+				let fr = new FileReader();
+				if (file.files[0]) {
+					fr.readAsArrayBuffer(file.files[0])
+
+				}
+
+				fr.onload = function(event) {
+					let fi = event.target.result
+					console.log(fi)
+					// let uint8=new Uint8Array(fi);
+					console.log(uint8)
+					let enc = new TextDecoder();
+					console.log(enc.decode(uint8));
+					console.log(enc.encoding)
+					45 // let data = new FormData();
+					// data.append('file', fi);
+					// data.append('name', 'cool')
+					// console.log(fi);
+					let name = file.value.split('\\');
+
+					axios({
+						method: 'post',
+						url: 'http://localhost:3000/file',
+						headers: {
+							// 'Content-Type': 'application/json'
+						},
+						data: {
+							// file:enc.decode(uint8) ,
+							file: enc.decode(uint8),
+							name: name[name.length - 1]
+						}
+					}).then((res) => {
+						console.log(res.data)
+					});
+					// 
+				}
+
+			}
+		}
+	}
+</script>
+
+<style>
+	#app {
+		width: 80vw;
+		height: 70vh;
+		padding: 0;
+		margin: 0 auto;
+		margin-top: 10vh;
+		display: flex;
+
+
+
+	}
+
+	#app #left {
+		width: 20%;
+		height: 100%;
+		background-color: #ff7675;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+
+	}
+
+	#app #left p {}
+
+	#app #left .onliUser {
+
+		width: 100%;
+		height: 40px;
+		line-height: 40px;
+	background-color:#fbc531;
+		text-align: center;
+	}
+
+	#app #left .onliUser.chose{
+		background-color: white;
+	}
+	#app #left .onliUser:hover {
+		cursor: pointer;
+	}
+
+	#app #right {
+		width: 80%;
+		height: 100%;
+		background-color: #b2bec3;
+	}
+
+	#app #right .message {
+		box-sizing: border-box;
+		height: 90%;
+	}
+
+
+	#app #right .message .messageView {
+
+		padding-left: 1%;
+		padding-top: 2%;
+
+
+	}
+
+
+
+	#app #right .message .sign.right {
+		display: flex;
+		text-align: right;
+		justify-content: flex-end;
+
+	}
+
+	#app #right .message .sign.left {
+		display: flex;
+		flex-direction: row-reverse;
+		justify-content: flex-end;
+
+	}
+
+	#app #right .message .sign.left img {
+
+		transform: rotateY(180deg);
+	}
+
+	#app #right .message .sign .text {
+		width: 60%;
+		overflow: hidden;
+	}
+
+	#app #right .message .sign .text p {
+		padding-right: 10px;
+		color: black;
+		font-weight: bold;
+		display: inline-block;
+		border-radius: 10px;
+		word-wrap: break-word;
+		word-break: normal;
+		text-indent: 10px;
+		text-align: left;
+
+	}
+
+	#app #right .message .sign .text .left {
+		background-color: #00cec9;
+
+	}
+
+	#app #right .message .sign .text .right {
+		background-color: #00b894
+	}
+
+	#app #right .submit {
+		height: 10%;
+		display: flex;
+		align-items: center;
+		justify-content: space-around;
+
+	}
+
+	#app #right .submit .file {
+		width: 5%;
+		height: 50%;
+		border-radius: 100%;
+		border: 0px;
+		background-color: white;
+		background-image: url(./assets/file.svg);
+		background-size: contain;
+		background-repeat: no-repeat;
+		background-position: center center;
+
+	}
+
+	#app #right .submit .sendInput {
+		height: 40%;
+		width: 70%;
+		border-radius: 50px;
+		border: 0px;
+
+
+	}
+
+	#app #right .submit .sendInput input {
+		text-indent: 10px;
+		width: 100%;
+		height: 100%;
+		border-radius: 50px;
+		border: 0px;
+		outline: none;
+
+
+	}
+
+
+
+	#app #right .submit .sendFile {
+
+		height: 40%;
+		display: none;
+	}
+
+	#app #right .submit .button {
+		width: 10%;
+		height: 50%;
+		border-radius: 50px;
+		border: 0px;
+		background-color: white;
+		background-image: url(assets/sned.svg);
+		background-size: contain;
+		background-repeat: no-repeat;
+		background-position: center center;
+	}
+</style>
